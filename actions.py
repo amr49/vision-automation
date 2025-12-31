@@ -38,22 +38,15 @@ class NotepadBot(DesktopBot):
         self.mouse_move(x, y)
         time.sleep(0.5)
         
-        # Direct left click
+        # Direct left click (Select)
         mouse.press(Button.left)
         mouse.release(Button.left)
         
-        time.sleep(0.1)
-        # Direct double click
-        mouse.press(Button.left)
-        mouse.release(Button.left)
-        time.sleep(0.1)
-        mouse.press(Button.left)
-        mouse.release(Button.left)
+        time.sleep(0.5)
         
-        # FAILSAFE: Also press Enter just in case the double click missed slightly but selected it
+        # Launch using ENTER key only (Prevents double opening)
         from pynput.keyboard import Key, Controller as KeyboardController
         keyboard = KeyboardController()
-        time.sleep(0.5)
         keyboard.press(Key.enter)
         keyboard.release(Key.enter)
         
