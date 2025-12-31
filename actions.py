@@ -92,9 +92,13 @@ class NotepadBot(DesktopBot):
         time.sleep(1.0)
         
         content = f"Title: {title}\n\n{body}"
-        # Use type_keys instead of paste for reliability
-        # Sometimes paste buffers get mixed up or fail in VMs/Automation
-        self.type_keys(content) 
+        # Use pyperclip to manually set clipboard first to ensure "vsv" doesn't happen
+        # BotCity's paste method sometimes relies on internal buffers.
+        import pyperclip
+        pyperclip.copy(content)
+        time.sleep(0.5) # Wait for clipboard to take
+        
+        self.control_v() # Explicit Paste shortcut
         time.sleep(1.0)
 
     def save_file(self, full_path):
