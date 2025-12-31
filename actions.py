@@ -84,6 +84,7 @@ class NotepadBot(DesktopBot):
             
         return False
 
+    def write_post(self, title, body):
         """
         Types the content into Notepad.
         """
@@ -91,8 +92,10 @@ class NotepadBot(DesktopBot):
         time.sleep(1.0)
         
         content = f"Title: {title}\n\n{body}"
-        self.paste(content) # Fast typing
-        time.sleep(0.5)
+        # Use type_keys instead of paste for reliability
+        # Sometimes paste buffers get mixed up or fail in VMs/Automation
+        self.type_keys(content) 
+        time.sleep(1.0)
 
     def save_file(self, full_path):
         """
