@@ -1,0 +1,19 @@
+# Bytes
+__pycache__/
+*.py[cod]
+
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Editor/IDE
+.vscode/
+.idea/
+
+# Artifacts
+*.png
+*.log
+grounding_failed.png
+debug_ocr_view.png
+*.jpg
