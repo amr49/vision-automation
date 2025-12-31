@@ -84,10 +84,12 @@ class NotepadBot(DesktopBot):
             
         return False
 
-    def write_post(self, title, body):
         """
         Types the content into Notepad.
         """
+        # Ensure window is focused and ready
+        time.sleep(1.0)
+        
         content = f"Title: {title}\n\n{body}"
         self.paste(content) # Fast typing
         time.sleep(0.5)
