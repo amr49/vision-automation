@@ -31,35 +31,37 @@ class NotepadBot(DesktopBot):
             logging.error(f"Could not find {app_name} icon.")
             return False
             
+        if not coords:
+            logging.error(f"Could not find {app_name} icon.")
+            return False
+            
         x, y = coords
         logging.info(f"Found icon at Logical Coordinates: ({x}, {y})")
         
-        # --- ROBUST INTERACTION BLOCK ---
-        # 1. Move using pynput (Direct Hardware Input)
-        from pynput.mouse import Button, Controller
-        mouse = Controller()
-        mouse.position = (x, y)
-        time.sleep(0.5)
+        # --- PYAUTOGUI INTERACTION BLOCK ---
+        # Robust, visible movement and clicking
+        import pyautogui
         
-        # 2. Hybrid Clicking Strategy
-        # Click 1: Select
-        mouse.press(Button.left)
-        mouse.release(Button.left)
+        # 1. Move with duration (Visual feedback for user)
+        # Check against screen bounds to prevent failsafe triggers
+        sw, sh = pyautogui.size()
+        if x < 0 or y < 0 or x >= sw or y >= sh:
+            logging.warning(f"Coordinates ({x},{y}) out of bounds. Clamping.")
+            x = max(0, min(x, sw-1))
+            y = max(0, min(y, sh-1))
+            
+        pyautogui.moveTo(x, y, duration=0.5)
+        
+        # 2. Click Strategy
+        pyautogui.click()
         time.sleep(0.2)
         
-        # Click 2: Double Click
-        mouse.press(Button.left)
-        mouse.release(Button.left)
-        time.sleep(0.1)
-        mouse.press(Button.left)
-        mouse.release(Button.left)
+        # Double Click
+        pyautogui.doubleClick()
         time.sleep(0.5)
         
-        # Click 3: Enter Key Failsafe
-        from pynput.keyboard import Key, Controller as KeyboardController
-        keyboard = KeyboardController()
-        keyboard.press(Key.enter)
-        keyboard.release(Key.enter)
+        # 3. Enter Key Failsafe
+        pyautogui.press('enter')
         
         # Wait for window
         if self.wait_for_window(title_re=".*Notepad.*", timeout=10000):
