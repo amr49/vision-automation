@@ -21,18 +21,6 @@ class NotepadBot(DesktopBot):
         subprocess.run(["powershell", "-command", "(New-Object -ComObject Shell.Application).MinimizeAll()"], shell=True)
         time.sleep(1.0) # Wait for animation
         
-        # Click on desktop to clear unwanted selection (e.g. gray/blue highlight on icon)
-        from pynput.mouse import Button, Controller
-        mouse = Controller()
-        try:
-             # Move to a neutral spot (top left) and click
-             mouse.position = (10, 100)
-             time.sleep(0.1)
-             mouse.click(Button.left)
-             time.sleep(0.5)
-        except Exception as e:
-             logging.warning(f"Could not click to clear selection: {e}")
-        
         # Grounding
         coords = self.grounding.ground_icon(label=app_name, template_path=template_path)
         
