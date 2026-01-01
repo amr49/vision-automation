@@ -110,10 +110,27 @@ class GroundingEngine:
                     text_center_x = x + w // 2
                     text_center_y = y + h // 2
                     
-                    # Heuristic: Icon center is ~40-50px above text center
-                    # We are reverting to the manual offset as automatic DPI detection caused issues.
-                    icon_center_x = text_center_x
-                    icon_center_y = text_center_y - 70 
+                    # Heuristic: Icon center is ~45px above text center (Physical Pixels)
+                    icon_center_x_physical = text_center_x
+                    icon_center_y_physical = text_center_y - 45
+                    
+                    # DPI SCALING CORRECTION (Restored)
+                    # This logic was present during the successful run.
+                    # It adjusts for the difference between ImageGrab (Physical) and Mouse (Logical).
+                    try:
+                       import pyautogui
+                       log_w, log_h = pyautogui.size()
+                       scale_x = original_img.shape[1] / log_w
+                       scale_y = original_img.shape[0] / log_h
+                    except ImportError:
+                       # Fallback if pyautogui not installed (though it should be)
+                       scale_x = 1.0
+                       scale_y = 1.0
+                       
+                    icon_center_x = int(icon_center_x_physical / scale_x)
+                    icon_center_y = int(icon_center_y_physical / scale_y)
+                    
+                    candidates.append((icon_center_x, icon_center_y, conf)) 
                     
                     candidates.append((icon_center_x, icon_center_y, conf))
                     
