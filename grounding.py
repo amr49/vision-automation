@@ -40,7 +40,6 @@ class GroundingEngine:
         
         # Define preprocessing pipeline
         # Optimized for speed and stability:
-        # optimized for speed and stability:
         # 1. Grayscale (No upscale, just high contrast config)
         pipeline = [
             ("Standard Gray", lambda img: cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)),
@@ -131,8 +130,6 @@ class GroundingEngine:
                     icon_center_y = int(icon_center_y_physical / scale_y)
                     
                     candidates.append((icon_center_x, icon_center_y, conf)) 
-                    
-                    candidates.append((icon_center_x, icon_center_y, conf))
                     
                     # If we find "Notepad" exactly, stop searching strategies as we found it.
                     if text_lower == "notepad":
