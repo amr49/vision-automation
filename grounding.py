@@ -40,11 +40,11 @@ class GroundingEngine:
         
         # Define preprocessing pipeline
         # Optimized for speed and stability:
+        # optimized for speed and stability:
         # 1. Grayscale (No upscale, just high contrast config)
         pipeline = [
             ("Standard Gray", lambda img: cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)),
-            ("Thresholding", lambda img: cv2.threshold(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]),
-            ("Upscale 1.5x", lambda img: cv2.resize(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), None, fx=1.5, fy=1.5, interpolation=cv2.INTER_LINEAR))
+            ("Thresholding", lambda img: cv2.threshold(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1])
         ]
         
         # Use simpler config initially to avoid hang
@@ -113,7 +113,7 @@ class GroundingEngine:
                     # Heuristic: Icon center is ~40-50px above text center
                     # We are reverting to the manual offset as automatic DPI detection caused issues.
                     icon_center_x = text_center_x
-                    icon_center_y = text_center_y - 50 
+                    icon_center_y = text_center_y - 70 
                     
                     candidates.append((icon_center_x, icon_center_y, conf))
                     
