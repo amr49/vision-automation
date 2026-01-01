@@ -11,7 +11,10 @@ dependencies = [
     "pytesseract",
     "requests",
     "numpy",
-    "pypiwin32"
+    "pypiwin32",
+    "pyautogui",
+    "pynput",
+    "pyperclip"
 ]
 
 [build-system]
