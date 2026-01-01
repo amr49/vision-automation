@@ -34,8 +34,8 @@ class NotepadBot(DesktopBot):
         from pynput.mouse import Button, Controller
         mouse = Controller()
         
-        # Move explicitly
-        self.mouse_move(x, y)
+        # Move explicitly using pynput (Raw movement)
+        mouse.position = (x, y)
         time.sleep(0.5)
         
         # --- LAUNCH STRATEGY (GOLDEN VERIFIED) ---
