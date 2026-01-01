@@ -110,86 +110,10 @@ class GroundingEngine:
                     text_center_x = x + w // 2
                     text_center_y = y + h // 2
                     
-                    # Heuristic: Icon center is ~40-50px above text center (Physical Pixels)
-                    icon_center_x_physical = text_center_x
-                    icon_center_y_physical = text_center_y - 50 
-                    
-                    # DPI SCALING CORRECTION
-                    # Detect screen scaling to convert Physical Pixels (Image) -> Logical Pixels (Mouse)
-                    try:
-                        from ctypes import windll
-                        user32 = windll.user32
-                        user32.SetProcessDPIAware()
-                        w_physical = user32.GetSystemMetrics(0)
-                        
-                        # Logical width (BotCity/Mouse default context)
-                        # We can get this by standard tkinter or verifying ratio
-                        # Simple hack: Image width (Physical) / Screen Width (Logical?)
-                        # Actually ImageGrab returns physical.
-                        # Pynput moves in logical.
-                        
-                        # Let's get logical width via a non-DPI aware method implied by standard frameworks?
-                        # Or just calculate directly if we know image width.
-                        
-                        img_width = original_img.shape[1] # Physical
-                        
-                        # To clean this up:
-                        # We just apply a divisor if we suspect scaling.
-                        # But simpler: Let's assume the ratio matches image_width / system_metrics_width
-                        pass
-                    except:
-                        pass
-                        
-                    # Simplified Correction:
-                    # If users have 125% scaling, we need to divide by 1.25
-                    # We can infer this often by checking standard bounds.
-                    # But without complex logic, let's look at the failure description.
-                    # "Standing in an empty place" usually means overshoot.
-                    
-                    # Let's assume 125% scaling (1.25) which is very common on laptops.
-                    # better approach: Check the image resolution vs standard 1920x1080.
-                    # The user said target is 1920x1080 resolution.
-                    # If image is 1920x1080, and user has 100%, match is 1:1.
-                    # If image is 1920x1080, and user has 125%, Logical is 1536x864.
-                    
-                    # We will implement dynamic scaling based on ctypes (reliable).
-                    
-                    import ctypes
-                    user32 = ctypes.windll.user32
-                    # Get Physical
-                    user32.SetProcessDPIAware()
-                    phys_w = user32.GetSystemMetrics(0)
-                    phys_h = user32.GetSystemMetrics(1)
-                    
-                    # Get Logical (by temporarily resetting or using alternative API? No, easier way:)
-                    # Using a non-DPI aware call or standard lib which is usually unaware
-                    # Actually, we can compare `phys_w` to `original_img.shape[1]` (which is captured physically).
-                    # Wait, ImageGrab is physical.
-                    
-                    # We need the LOGICAL width Pynput uses.
-                    # Simply:
-                    # scale_factor = phys_w / logical_w
-                    # x_logical = x_physical / scale_factor
-                    
-                    # Get logical metrics
-                    # Creating a separate non-aware context is hard in one script.
-                    # Let's just hardcode a common fix or try to read it.
-                    
-                    # Heuristic: If we are clicking "empty space", we are likely overshooting.
-                    # Let's try to normalize by 1.25 blindly? No, risky.
-                    
-                    # Alternate: Use `pyautogui.size()` which returns logical size.
-                    try:
-                       import pyautogui
-                       log_w, log_h = pyautogui.size()
-                       scale_x = original_img.shape[1] / log_w
-                       scale_y = original_img.shape[0] / log_h
-                    except ImportError:
-                       scale_x = 1.0
-                       scale_y = 1.0
-                       
-                    icon_center_x = int(icon_center_x_physical / scale_x)
-                    icon_center_y = int(icon_center_y_physical / scale_y)
+                    # Heuristic: Icon center is ~40-50px above text center
+                    # We are reverting to the manual offset as automatic DPI detection caused issues.
+                    icon_center_x = text_center_x
+                    icon_center_y = text_center_y - 50 
                     
                     candidates.append((icon_center_x, icon_center_y, conf))
                     
