@@ -2,68 +2,110 @@ from botcity.core import DesktopBot
 import time
 import logging
 import subprocess
-from grounding import GroundingEngine
 import pyperclip
 
 class NotepadBot(DesktopBot):
     def __init__(self):
         super().__init__()
-        self.grounding = GroundingEngine()
+        # Register the image resources
+        self.image_paths = {
+            "notepad": r"resources\notepad.png",
+            "notepad_small": r"resources\notepad_small_size.png",
+            "notepad_big": r"resources\notepad_big_size.png"
+        }
+        for label, path in self.image_paths.items():
+            self.add_image(label, path)
         
     def launch_app_via_icon(self, app_name="Notepad", template_path=None):
         """
-        Finds the desktop icon and launches it.
+        Finds the desktop icon and launches it using BotCity image matching with retry logic.
+        Tries multiple size variations.
         """
-        logging.info(f"Looking for {app_name} on desktop...")
+        logging.info(f"Looking for {app_name} on desktop using BotCity...")
         
         # Minimize all windows to see desktop
         subprocess.run(["powershell", "-command", "(New-Object -ComObject Shell.Application).MinimizeAll()"], shell=True)
         time.sleep(1.0) 
         
-        # Grounding
-        coords = self.grounding.ground_icon(label=app_name, template_path=template_path)
+        # BotCity Check with Retry Logic (3 attempts, 1s delay)
+        icon_found = False
+        found_label = None
         
-        if not coords:
-            logging.error(f"Could not find {app_name} icon.")
-            return False
-            
-        if not coords:
-            logging.error(f"Could not find {app_name} icon.")
-            return False
-            
-        if not coords:
-            logging.error(f"Could not find {app_name} icon.")
-            return False
-            
-        x, y = coords
-        logging.info(f"Found icon at Logical Coordinates: ({x}, {y})")
+        # List of labels to try
+        labels_to_try = ["notepad", "notepad_small", "notepad_big"]
         
-        # --- PYAUTOGUI INTERACTION BLOCK ---
-        # Robust, visible movement and clicking
-        import pyautogui
-        
-        # 1. Move with duration (Visual feedback for user)
-        # Check against screen bounds to prevent failsafe triggers
-        sw, sh = pyautogui.size()
-        if x < 0 or y < 0 or x >= sw or y >= sh:
-            logging.warning(f"Coordinates ({x},{y}) out of bounds. Clamping.")
-            x = max(0, min(x, sw-1))
-            y = max(0, min(y, sh-1))
+        for attempt in range(3):
+            for label in labels_to_try:
+                if self.find(label, matching=0.9, waiting_time=500): # Short wait per icon
+                    icon_found = True
+                    found_label = label
+                    logging.info(f"Found icon matching label: {label}")
+                    break
             
-        pyautogui.moveTo(x, y, duration=0.5)
+            if icon_found:
+                break
+                
+            logging.warning(f"Attempt {attempt+1}: Icon not found. Retrying...")
+            time.sleep(1.0)
+            
+        if not icon_found:
+             logging.error(f"Could not find {app_name} icon via image matching after 3 attempts.")
+             return False
         
-        # 2. Click Strategy
-        pyautogui.click()
+        logging.info(f"Found {app_name} icon.")
+        
+        # --- DELIVERABLE REQUIREMENT: Annotated Screenshot ---
+        try:
+            # Since self.find() moves the mouse to the center of the found image, 
+            # we can get the location from the mouse position.
+            # We can get the size from the image file itself.
+            import pyautogui
+            import cv2
+            import numpy as np
+            from PIL import ImageGrab
+            import os
+            
+            # Get current mouse position (Center of icon)
+            mx, my = pyautogui.position()
+            
+            # Get Image Dimensions using the matched label
+            image_path = self.image_paths.get(found_label, r"resources\notepad.png")
+            
+            if os.path.exists(image_path):
+                template = cv2.imread(image_path)
+                h, w = template.shape[:2]
+                
+                # Calculate Top-Left
+                x = mx - w // 2
+                y = my - h // 2
+                
+                # Capture full screen
+                screen = ImageGrab.grab()
+                img = cv2.cvtColor(np.array(screen), cv2.COLOR_RGB2BGR)
+                
+                # Draw Rectangle (Red)
+                cv2.rectangle(img, (int(x), int(y)), (int(x+w), int(y+h)), (0, 0, 255), 2)
+                
+                # Draw Text
+                cv2.putText(img, f"Detected: {app_name} ({found_label})", (int(x), int(y)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+                
+                # Save
+                filename = f"detected_icon_{int(time.time())}.png"
+                cv2.imwrite(filename, img)
+                logging.info(f"Saved annotated screenshot: {filename}")
+        except Exception as e:
+            logging.warning(f"Failed to save annotated screenshot: {e}")
+        
+        # Simplify Launch Strategy
+        # Click the CENTER of the detected element (Mouse is already there)
+        self.click() # Click current position
         time.sleep(0.2)
         
-        # Double Click
-        pyautogui.doubleClick()
-        time.sleep(0.5)
+        # Double Click to launch
+        self.double_click()
+        time.sleep(1.0)
         
-        # 3. Enter Key Failsafe
-        pyautogui.press('enter')
-        
-        # Wait for window
+        # Wait for window to ensure it opened
         if self.wait_for_window(title_re=".*Notepad.*", timeout=10000):
             logging.info("Notepad launched successfully.")
             return True
@@ -86,61 +128,53 @@ class NotepadBot(DesktopBot):
         """
         Types the content into Notepad.
         """
-        # Ensure window is focused
-        time.sleep(1.0)
+        # Ensure focus by waiting
+        time.sleep(2.0)
         
         content = f"Title: {title}\n\n{body}"
         
-        # Use Clipboard Paste (Fast + Safe)
+        # Use Clipboard
         pyperclip.copy(content)
-        time.sleep(0.5) # Wait for clipboard
+        time.sleep(1.0)
         self.control_v()
         time.sleep(1.0)
 
     def save_file(self, full_path):
         """
-        Saves the file to the specific path.
+        Saves the file to the specific path and overwrites if exists.
         """
-        self.control_s() 
-        time.sleep(1.0)
-        
-        # Set clipboard path first
+        self.control_s()
+        time.sleep(1.5) # Wait for dialog
+
+        # Paste full path
         pyperclip.copy(full_path)
-        time.sleep(0.5)
-        self.control_v()
-        
-        time.sleep(0.5)
-        self.enter()
-        
-        # Wait for overwrite popup just in case (blind enter)
         time.sleep(1.0)
-        self.enter() 
+        self.control_v()
+
+        time.sleep(1.0)
+        self.enter()  # Save
+
+        # --- HANDLE OVERWRITE POPUP ---
+        time.sleep(1.0)
+
+        # Use BotCity built-in methods instead of pynput
+        # Press 'y' to confirm overwrite
+        self.type_keys('y')
+        time.sleep(0.3)
+        self.enter()
         
         time.sleep(1.0)
 
     def close_app(self):
-        self.alt_f4()
-        time.sleep(1.0)
-        
-        # Handle "Do you want to save changes?" popup
-        # If we already saved, this might appear if we typed something after save or timing.
-        # The default button is usually "Save". 
-        # Since we want to just close, and we (theoretically) saved, we can just press Enter to "Save again" 
-        # OR press Tab -> Enter to "Don't Save".
-        # Let's be safe: If this popup appears, it means there are unsaved changes (or the app "thinks" so).
-        # We'll just press Enter to confirm "Save" (if focused) to be safe, or just close.
-        
-        # ACTUALLY: The image shows "Save" button is focused by default (Blue outline).
-        # So hitting Enter will just save it and close. This is harmless.
-        # But if it's "Save As", it might get stuck.
-        
-        # Quick check: Press Enter.
-        from pynput.keyboard import Key, Controller as KeyboardController
-        keyboard = KeyboardController()
-        
-        # We blind press Enter just in case the dialog is there.
-        # If dialog is NOT there, Enter usually does nothing on desktop.
-        time.sleep(0.5)
-        keyboard.press(Key.enter)
-        keyboard.release(Key.enter)
-        time.sleep(1.0)
+        """
+        Closes Notepad safely using taskkill to avoid accidental interactions with other windows (like Desktop Shutdown).
+        """
+        logging.info("Closing Notepad...")
+        try:
+            subprocess.run(["taskkill", "/IM", "notepad.exe", "/F"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            time.sleep(1.0)
+        except Exception as e:
+            logging.error(f"Error closing Notepad: {e}")
+
+    
+    
