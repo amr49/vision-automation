@@ -194,12 +194,37 @@ class GroundingEngine:
                     
                     # If we find "Notepad" exactly, stop searching strategies as we found it.
                     if text_lower == "notepad":
+                         # Draw Debug & Save (For Deliverables)
+                         try:
+                             debug_img = original_img.copy()
+                             # Draw Text Rect (Red)
+                             cv2.rectangle(debug_img, (x, y), (x+w, y+h), (0, 0, 255), 2)
+                             # Draw Click Point (Green Dot)
+                             cv2.circle(debug_img, (icon_center_x, icon_center_y), 5, (0, 255, 0), -1)
+                             cv2.putText(debug_img, f"Found: {text} ({conf}%)", (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                             
+                             filename = f"detected_icon_{text}_{conf}.png"
+                             cv2.imwrite(filename, debug_img)
+                             logging.info(f"Saved success screenshot: {filename}")
+                         except Exception as e:
+                             logging.warning(f"Could not save debug image: {e}")
+
                          candidates.sort(key=lambda x: x[2], reverse=True)
                          return (candidates[0][0], candidates[0][1])
 
             if candidates:
                 # specific match with highest confidence
                 candidates.sort(key=lambda x: x[2], reverse=True)
+                
+                # Draw Debug for best candidate
+                try:
+                     best = candidates[0]
+                     cx, cy, c_conf = best
+                     debug_img = original_img.copy()
+                     cv2.circle(debug_img, (cx, cy), 10, (0, 255, 0), -1)
+                     cv2.imwrite(f"detected_candidate_{c_conf}.png", debug_img)
+                except: pass
+                
                 return (candidates[0][0], candidates[0][1])
         
         # If we failed all strategies
