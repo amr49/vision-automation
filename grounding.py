@@ -60,184 +60,153 @@ class GroundingEngine:
         # NOTE: 2x Upscaling a 1080p Screenshot makes it 4K (huge for Tesseract on CPU), causing the freeze/timeout.
         # We will remove upscaling or limit it.
         
-        custom_config = r'--oem 3 --psm 11' # Sparse text search
+        # Tesseract Configurations to try
+        # PSM 11: Sparse text (Best for icons scattered)
+        # PSM 4: Single column (Good if icons are aligned)
+        # PSM 3: Fully automatic (Fallback)
+        configs = [
+            r'--oem 3 --psm 11',
+            r'--oem 3 --psm 4',
+            r'--oem 3 --psm 3'
+        ]
         
-        for name, process_func in pipeline:
-            logging.info(f"Trying OCR Strategy: {name}")
-            try:
-                processed = process_func(original_img)
-                # Ensure we don't pass a massive image if user has high DPI
-                h, w = processed.shape[:2]
-                if w > 2500: # If > 2K width, resize DOWN or keep original
-                    scale = 0.8
-                    processed = cv2.resize(processed, None, fx=scale, fy=scale)
-                else:
-                    scale = 1.0
-
-                data = pytesseract.image_to_data(processed, config=custom_config, output_type=pytesseract.Output.DICT)
-            except Exception as e:
-                logging.warning(f"Strategy {name} failed: {e}")
-                continue
-
-            n_boxes = len(data['text'])
-            candidates = []
-            
-            for i in range(n_boxes):
-                text = data['text'][i].strip()
-                if not text:
-                    continue
-                
-                conf = int(data['conf'][i])
-                
-                # Extremely loose matching
-                text_lower = text.lower().strip()
-                label_lower = label.lower().strip()
-                
-                # --- FILTER TRAPS ---
-                # Ignore the debug files themselves if they are visible on desktop
-                if "detected_icon" in text_lower or ".png" in text_lower:
-                    continue
-                
-                # Check 1: Exact substring match
-                match = label_lower in text_lower
-                
-                # Check 2: Fuzzy match for common OCR errors (e.g. "Notepqd", "Notepad.")
-                # Simple heuristic: if 4+ characters match sequentially
-                if not match and len(label_lower) > 3:
-                    if label_lower[:4] in text_lower: # "Note"
-                        match = True
-                
-                if match:
-                    # Ignore confidence if the text is clearly there
-                    effective_conf = conf if conf > -1 else 0
-                    
-                    logging.info(f"Potential match: '{text}' (conf: {conf})")
-                    
-                    (x, y, w, h) = (data['left'][i], data['top'][i], data['width'][i], data['height'][i])
-                    
-                    # Scale back coordinates
-                    x, y, w, h = int(x / scale), int(y / scale), int(w / scale), int(h / scale)
-                    
-                    text_center_x = x + w // 2
-                    text_center_y = y + h // 2
-                    
-                    # Heuristic: Icon center is ~40-50px above text center (Physical Pixels)
-                    icon_center_x_physical = text_center_x
-                    icon_center_y_physical = text_center_y - 50
-                    
-                    # DPI SCALING CORRECTION
-                    # Detect screen scaling to convert Physical Pixels (Image) -> Logical Pixels (Mouse)
-                    try:
-                        from ctypes import windll
-                        user32 = windll.user32
-                        user32.SetProcessDPIAware()
-                        w_physical = user32.GetSystemMetrics(0)
-                        
-                        # Logical width (BotCity/Mouse default context)
-                        # We can get this by standard tkinter or verifying ratio
-                        # Simple hack: Image width (Physical) / Screen Width (Logical?)
-                        # Actually ImageGrab returns physical.
-                        # Pynput moves in logical.
-                        
-                        # Let's get logical width via a non-DPI aware method implied by standard frameworks?
-                        # Or just calculate directly if we know image width.
-                        
-                        img_width = original_img.shape[1] # Physical
-                        
-                        # To clean this up:
-                        # We just apply a divisor if we suspect scaling.
-                        # But simpler: Let's assume the ratio matches image_width / system_metrics_width
-                        pass
-                    except:
-                        pass
-                        
-                    # Simplified Correction:
-                    # If users have 125% scaling, we need to divide by 1.25
-                    # We can infer this often by checking standard bounds.
-                    # But without complex logic, let's look at the failure description.
-                    # "Standing in an empty place" usually means overshoot.
-                    
-                    # Let's assume 125% scaling (1.25) which is very common on laptops.
-                    # better approach: Check the image resolution vs standard 1920x1080.
-                    # The user said target is 1920x1080 resolution.
-                    # If image is 1920x1080, and user has 100%, match is 1:1.
-                    # If image is 1920x1080, and user has 125%, Logical is 1536x864.
-                    
-                    # We will implement dynamic scaling based on ctypes (reliable).
-                    
-                    import ctypes
-                    user32 = ctypes.windll.user32
-                    # Get Physical
-                    user32.SetProcessDPIAware()
-                    phys_w = user32.GetSystemMetrics(0)
-                    phys_h = user32.GetSystemMetrics(1)
-                    
-                    # Get Logical (by temporarily resetting or using alternative API? No, easier way:)
-                    # Using a non-DPI aware call or standard lib which is usually unaware
-                    # Actually, we can compare `phys_w` to `original_img.shape[1]` (which is captured physically).
-                    # Wait, ImageGrab is physical.
-                    
-                    # We need the LOGICAL width Pynput uses.
-                    # Simply:
-                    # scale_factor = phys_w / logical_w
-                    # x_logical = x_physical / scale_factor
-                    
-                    # Get logical metrics
-                    # Creating a separate non-aware context is hard in one script.
-                    # Let's just hardcode a common fix or try to read it.
-                    
-                    # Heuristic: If we are clicking "empty space", we are likely overshooting.
-                    # Let's try to normalize by 1.25 blindly? No, risky.
-                    
-                    # Alternate: Use `pyautogui.size()` which returns logical size.
-                    try:
-                       import pyautogui
-                       log_w, log_h = pyautogui.size()
-                       scale_x = original_img.shape[1] / log_w
-                       scale_y = original_img.shape[0] / log_h
-                    except ImportError:
-                       scale_x = 1.0
-                       scale_y = 1.0
-                       
-                    icon_center_x = int(icon_center_x_physical / scale_x)
-                    icon_center_y = int(icon_center_y_physical / scale_y)
-                    
-                    candidates.append((icon_center_x, icon_center_y, conf))
-                    
-                    # If we find "Notepad" exactly, stop searching strategies as we found it.
-                    if text_lower == "notepad":
-                         # Draw Debug & Save (For Deliverables)
-                         try:
-                             debug_img = original_img.copy()
-                             # Draw Text Rect (Red)
-                             cv2.rectangle(debug_img, (x, y), (x+w, y+h), (0, 0, 255), 2)
-                             # Draw Click Point (Green Dot)
-                             cv2.circle(debug_img, (icon_center_x, icon_center_y), 5, (0, 255, 0), -1)
-                             cv2.putText(debug_img, f"Found: {text} ({conf}%)", (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-                             
-                             filename = f"detected_icon_{text}_{conf}.png"
-                             cv2.imwrite(filename, debug_img)
-                             logging.info(f"Saved success screenshot: {filename}")
-                         except Exception as e:
-                             logging.warning(f"Could not save debug image: {e}")
-
-                         candidates.sort(key=lambda x: x[2], reverse=True)
-                         return (candidates[0][0], candidates[0][1])
-
-            if candidates:
-                # specific match with highest confidence
-                candidates.sort(key=lambda x: x[2], reverse=True)
-                
-                # Draw Debug for best candidate
+        for psm_config in configs:
+            logging.info(f"Trying Tesseract Config: {psm_config}")
+            for name, process_func in pipeline:
+                logging.info(f"Trying OCR Strategy: {name}")
                 try:
-                     best = candidates[0]
-                     cx, cy, c_conf = best
-                     debug_img = original_img.copy()
-                     cv2.circle(debug_img, (cx, cy), 10, (0, 255, 0), -1)
-                     cv2.imwrite(f"detected_candidate_{c_conf}.png", debug_img)
-                except: pass
+                    processed = process_func(original_img)
+                    # Ensure we don't pass a massive image if user has high DPI
+                    h, w = processed.shape[:2]
+                    if w > 2500: # If > 2K width, resize DOWN or keep original
+                        scale = 0.8
+                        processed = cv2.resize(processed, None, fx=scale, fy=scale)
+                    else:
+                        scale = 1.0
+
+                    data = pytesseract.image_to_data(processed, config=psm_config, output_type=pytesseract.Output.DICT)
+                except Exception as e:
+                    logging.warning(f"Strategy {name} failed: {e}")
+                    continue
+
+                n_boxes = len(data['text'])
+                candidates = []
                 
-                return (candidates[0][0], candidates[0][1])
+                for i in range(n_boxes):
+                    text = data['text'][i].strip()
+                    if not text:
+                        continue
+                    
+                    conf = int(data['conf'][i])
+                    
+                    # Extremely loose matching
+                    text_lower = text.lower().strip()
+                    label_lower = label.lower().strip()
+                    
+                    # --- FILTER TRAPS ---
+                    # Ignore the debug files themselves if they are visible on desktop
+                    if "detected_icon" in text_lower or ".png" in text_lower:
+                        continue
+                    
+                    # Check 1: Exact substring match
+                    match = label_lower in text_lower
+                    
+                    # Check 2: Fuzzy match for common OCR errors (e.g. "Notepqd", "Notepad.")
+                    # Simple heuristic: if 4+ characters match sequentially
+                    if not match and len(label_lower) > 3:
+                        if label_lower[:4] in text_lower: # "Note"
+                            match = True
+                    
+                    if match:
+                        # Ignore confidence if the text is clearly there
+                        effective_conf = conf if conf > -1 else 0
+                        
+                        logging.info(f"Potential match: '{text}' (conf: {conf})")
+                        
+                        (x, y, w, h) = (data['left'][i], data['top'][i], data['width'][i], data['height'][i])
+                        
+                        # Scale back coordinates
+                        x, y, w, h = int(x / scale), int(y / scale), int(w / scale), int(h / scale)
+                        
+                        text_center_x = x + w // 2
+                        text_center_y = y + h // 2
+                        
+                        # Heuristic: Icon center is ~40-50px above text center (Physical Pixels)
+                        icon_center_x_physical = text_center_x
+                        icon_center_y_physical = text_center_y - 50
+                        
+                        # DPI SCALING CORRECTION
+                        # Detect screen scaling to convert Physical Pixels (Image) -> Logical Pixels (Mouse)
+                        try:
+                            from ctypes import windll
+                            user32 = windll.user32
+                            user32.SetProcessDPIAware()
+                            w_physical = user32.GetSystemMetrics(0)
+                   
+                            # Let's get logical width via a non-DPI aware method implied by standard frameworks?
+                            # Or just calculate directly if we know image width.
+                            
+                            img_width = original_img.shape[1] # Physical
+                            pass
+                        except:
+                            pass
+                            
+                        # Simplified Correction:
+                        import ctypes
+                        user32 = ctypes.windll.user32
+                        # Get Physical
+                        user32.SetProcessDPIAware()
+                        phys_w = user32.GetSystemMetrics(0)
+                        phys_h = user32.GetSystemMetrics(1)
+                        
+                        try:
+                           import pyautogui
+                           log_w, log_h = pyautogui.size()
+                           scale_x = original_img.shape[1] / log_w
+                           scale_y = original_img.shape[0] / log_h
+                        except ImportError:
+                           scale_x = 1.0
+                           scale_y = 1.0
+                           
+                        icon_center_x = int(icon_center_x_physical / scale_x)
+                        icon_center_y = int(icon_center_y_physical / scale_y)
+                        
+                        candidates.append((icon_center_x, icon_center_y, conf))
+                        
+                        # If we find "Notepad" exactly, stop searching strategies as we found it.
+                        if text_lower == "notepad":
+                             # Draw Debug & Save (For Deliverables)
+                             try:
+                                 debug_img = original_img.copy()
+                                 # Draw Text Rect (Red)
+                                 cv2.rectangle(debug_img, (x, y), (x+w, y+h), (0, 0, 255), 2)
+                                 # Draw Click Point (Green Dot)
+                                 cv2.circle(debug_img, (icon_center_x, icon_center_y), 5, (0, 255, 0), -1)
+                                 cv2.putText(debug_img, f"Found: {text} ({conf}%)", (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                                 
+                                 filename = f"detected_icon_{text}_{conf}.png"
+                                 cv2.imwrite(filename, debug_img)
+                                 logging.info(f"Saved success screenshot: {filename}")
+                             except Exception as e:
+                                 logging.warning(f"Could not save debug image: {e}")
+
+                             candidates.sort(key=lambda x: x[2], reverse=True)
+                             return (candidates[0][0], candidates[0][1])
+
+                if candidates:
+                    # specific match with highest confidence
+                    candidates.sort(key=lambda x: x[2], reverse=True)
+                    
+                    # Draw Debug for best candidate
+                    try:
+                         best = candidates[0]
+                         cx, cy, c_conf = best
+                         debug_img = original_img.copy()
+                         cv2.circle(debug_img, (cx, cy), 10, (0, 255, 0), -1)
+                         cv2.imwrite(f"detected_candidate_{c_conf}.png", debug_img)
+                    except: pass
+                    
+                    return (candidates[0][0], candidates[0][1])
         
         # If we failed all strategies
         logging.warning(f"Label '{label}' not found after trying all OCR strategies.")
