@@ -27,24 +27,35 @@ class NotepadBot(DesktopBot):
             logging.error(f"Could not find {app_name} icon.")
             return False
             
+        if not coords:
+            logging.error(f"Could not find {app_name} icon.")
+            return False
+            
         x, y = coords
         logging.info(f"Found icon at Logical Coordinates: ({x}, {y})")
         
-        # Use pynput for direct input to bypass BotCity state checks
+        # --- ROBUST INTERACTION BLOCK ---
+        # 1. Move using pynput (Direct Hardware Input)
         from pynput.mouse import Button, Controller
         mouse = Controller()
-        
-        # Move explicitly using pynput (Raw movement)
         mouse.position = (x, y)
         time.sleep(0.5)
         
-        # --- LAUNCH STRATEGY (GOLDEN VERIFIED) ---
-        # 1. Single Click to Select
+        # 2. Hybrid Clicking Strategy
+        # Click 1: Select
+        mouse.press(Button.left)
+        mouse.release(Button.left)
+        time.sleep(0.2)
+        
+        # Click 2: Double Click
+        mouse.press(Button.left)
+        mouse.release(Button.left)
+        time.sleep(0.1)
         mouse.press(Button.left)
         mouse.release(Button.left)
         time.sleep(0.5)
         
-        # 2. Enter Key to Launch (Reliable, no double-click ghosts)
+        # Click 3: Enter Key Failsafe
         from pynput.keyboard import Key, Controller as KeyboardController
         keyboard = KeyboardController()
         keyboard.press(Key.enter)
@@ -107,4 +118,27 @@ class NotepadBot(DesktopBot):
 
     def close_app(self):
         self.alt_f4()
+        time.sleep(1.0)
+        
+        # Handle "Do you want to save changes?" popup
+        # If we already saved, this might appear if we typed something after save or timing.
+        # The default button is usually "Save". 
+        # Since we want to just close, and we (theoretically) saved, we can just press Enter to "Save again" 
+        # OR press Tab -> Enter to "Don't Save".
+        # Let's be safe: If this popup appears, it means there are unsaved changes (or the app "thinks" so).
+        # We'll just press Enter to confirm "Save" (if focused) to be safe, or just close.
+        
+        # ACTUALLY: The image shows "Save" button is focused by default (Blue outline).
+        # So hitting Enter will just save it and close. This is harmless.
+        # But if it's "Save As", it might get stuck.
+        
+        # Quick check: Press Enter.
+        from pynput.keyboard import Key, Controller as KeyboardController
+        keyboard = KeyboardController()
+        
+        # We blind press Enter just in case the dialog is there.
+        # If dialog is NOT there, Enter usually does nothing on desktop.
+        time.sleep(0.5)
+        keyboard.press(Key.enter)
+        keyboard.release(Key.enter)
         time.sleep(1.0)

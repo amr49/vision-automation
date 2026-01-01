@@ -91,6 +91,11 @@ class GroundingEngine:
                 text_lower = text.lower().strip()
                 label_lower = label.lower().strip()
                 
+                # --- FILTER TRAPS ---
+                # Ignore the debug files themselves if they are visible on desktop
+                if "detected_icon" in text_lower or ".png" in text_lower:
+                    continue
+                
                 # Check 1: Exact substring match
                 match = label_lower in text_lower
                 
