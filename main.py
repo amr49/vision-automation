@@ -37,7 +37,8 @@ def main():
         max_retries = 3
         launched = False
         for attempt in range(max_retries):
-            if bot.launch_app_via_icon(NOTEPAD_ICON_LABEL):
+            # Try with OCR first, fallback to 'notepad_template.png' if exists
+            if bot.launch_app_via_icon(NOTEPAD_ICON_LABEL, template_path="notepad_template.png"):
                 launched = True
                 break
             logging.warning(f"Launch attempt {attempt+1} failed. Retrying...")
