@@ -40,10 +40,15 @@ class GroundingEngine:
         
         # Define preprocessing pipeline
         # Optimized for speed and stability:
-        # 1. Grayscale (No upscale, just high contrast config)
+        # 1. Grayscale (Standard)
+        # 2. Thresholding (High Contrast)
+        # 3. Inverted (Dark text on light bg vs Light on Dark)
+        # 4. Dilate (Beef up thin text)
         pipeline = [
             ("Standard Gray", lambda img: cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)),
-            ("Thresholding", lambda img: cv2.threshold(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1])
+            ("Thresholding", lambda img: cv2.threshold(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]),
+            ("Inverted", lambda img: cv2.bitwise_not(cv2.threshold(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1])),
+            ("Dilated", lambda img: cv2.dilate(cv2.threshold(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1], cv2.getStructuringElement(cv2.MORPH_RECT, (2,2)), iterations=1))
         ]
         
         # Use simpler config initially to avoid hang
