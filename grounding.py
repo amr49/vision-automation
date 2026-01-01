@@ -43,7 +43,8 @@ class GroundingEngine:
         # 1. Grayscale (No upscale, just high contrast config)
         pipeline = [
             ("Standard Gray", lambda img: cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)),
-            ("Thresholding", lambda img: cv2.threshold(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1])
+            ("Thresholding", lambda img: cv2.threshold(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]),
+            ("Upscale 1.5x", lambda img: cv2.resize(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), None, fx=1.5, fy=1.5, interpolation=cv2.INTER_LINEAR))
         ]
         
         # Use simpler config initially to avoid hang
