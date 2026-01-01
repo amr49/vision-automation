@@ -28,40 +28,33 @@ class GroundingEngine:
     def capture_screen(self):
         """Captures the full screen and returns it as a numpy array (BGR)."""
         screen = ImageGrab.grab()
+         # ImageGrab returns RGB, we convert to BGR for OpenCV
         return cv2.cvtColor(np.array(screen), cv2.COLOR_RGB2BGR)
 
     def find_icon_by_text(self, label="Notepad", confidence_threshold=40):
         """
         Locates the icon by finding the text label below it using OCR.
-        Tries multiple preprocessing techniques to maximize detection rate.
         """
         logging.info(f"Attempting to find icon with label '{label}' via OCR...")
         original_img = self.capture_screen()
         
         # Define preprocessing pipeline
-        # Optimized for speed and stability:
-        # 1. Grayscale (No upscale, just high contrast config)
+        # Optimized for speed and stability (Standard 1080p-4k range)
         pipeline = [
             ("Standard Gray", lambda img: cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)),
             ("Thresholding", lambda img: cv2.threshold(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1])
         ]
         
-        # Use simpler config initially to avoid hang
-        custom_config = r'--oem 3 --psm 3' # Default page segmentation (might work better for full desktop)
-        # OR stick to 11 but with smaller image
-        
-        # NOTE: 2x Upscaling a 1080p Screenshot makes it 4K (huge for Tesseract on CPU), causing the freeze/timeout.
-        # We will remove upscaling or limit it.
-        
-        custom_config = r'--oem 3 --psm 11' # Sparse text search
+        # Config: Sparse text search, reliable for desktop labels
+        custom_config = r'--oem 3 --psm 11'
         
         for name, process_func in pipeline:
             logging.info(f"Trying OCR Strategy: {name}")
             try:
                 processed = process_func(original_img)
-                # Ensure we don't pass a massive image if user has high DPI
+                # Cap max width to prevent Tesseract freeze on huge screenshots
                 h, w = processed.shape[:2]
-                if w > 2500: # If > 2K width, resize DOWN or keep original
+                if w > 3000: 
                     scale = 0.8
                     processed = cv2.resize(processed, None, fx=scale, fy=scale)
                 else:
@@ -82,114 +75,93 @@ class GroundingEngine:
                 
                 conf = int(data['conf'][i])
                 
-                # Extremely loose matching
+                # Fuzzy Matching Logic
                 text_lower = text.lower().strip()
                 label_lower = label.lower().strip()
                 
-                # Check 1: Exact substring match
                 match = label_lower in text_lower
-                
-                # Check 2: Fuzzy match for common OCR errors (e.g. "Notepqd", "Notepad.")
-                # Simple heuristic: if 4+ characters match sequentially
+                # Heuristic: "Notepa" or similar
                 if not match and len(label_lower) > 3:
-                    if label_lower[:4] in text_lower: # "Note"
+                     if label_lower[:4] in text_lower:
                         match = True
-                
+
                 if match:
-                    # Ignore confidence if the text is clearly there
-                    effective_conf = conf if conf > -1 else 0
-                    
                     logging.info(f"Potential match: '{text}' (conf: {conf})")
                     
                     (x, y, w, h) = (data['left'][i], data['top'][i], data['width'][i], data['height'][i])
                     
-                    # Scale back coordinates
+                    # Scale back coordinates if we resized image
                     x, y, w, h = int(x / scale), int(y / scale), int(w / scale), int(h / scale)
                     
                     text_center_x = x + w // 2
                     text_center_y = y + h // 2
                     
-                    # Heuristic: Icon center is ~45px above text center (Physical Pixels)
+                    # --- CRITICAL COORDINATE LOGIC (GOLDEN VERIFIED) ---
+                    # 1. Base Heuristic: Icon body is above the text.
+                    # Physical pixels (from Screenshot)
                     icon_center_x_physical = text_center_x
-                    icon_center_y_physical = text_center_y - 45
+                    icon_center_y_physical = text_center_y - 45 
                     
-                    # DPI SCALING CORRECTION (Restored)
-                    # This logic was present during the successful run.
-                    # It adjusts for the difference between ImageGrab (Physical) and Mouse (Logical).
+                    # 2. DPI Scaling Correction
+                    # Compares Physical resolution (Image) vs Logical resolution (Mouse)
                     try:
                        import pyautogui
                        log_w, log_h = pyautogui.size()
                        scale_x = original_img.shape[1] / log_w
                        scale_y = original_img.shape[0] / log_h
-                    except ImportError:
-                       # Fallback if pyautogui not installed (though it should be)
+                    except Exception:
                        scale_x = 1.0
                        scale_y = 1.0
                        
                     icon_center_x = int(icon_center_x_physical / scale_x)
                     icon_center_y = int(icon_center_y_physical / scale_y)
                     
-                    candidates.append((icon_center_x, icon_center_y, conf)) 
-                    
-                    # If we find "Notepad" exactly, stop searching strategies as we found it.
+                    candidates.append((icon_center_x, icon_center_y, conf))
+
+                    # Exact match priority
                     if text_lower == "notepad":
-                         candidates.sort(key=lambda x: x[2], reverse=True)
-                         return (candidates[0][0], candidates[0][1])
+                         return (icon_center_x, icon_center_y)
 
             if candidates:
-                # specific match with highest confidence
                 candidates.sort(key=lambda x: x[2], reverse=True)
                 return (candidates[0][0], candidates[0][1])
         
-        # If we failed all strategies
-        logging.warning(f"Label '{label}' not found after trying all OCR strategies.")
-        
-        # Save debug image of the last attempt (Thresholding usually shows structure best)
+        # Debug output if failed
+        logging.warning(f"Label '{label}' not found.")
         debug_path = "debug_ocr_view.png"
         cv2.imwrite(debug_path, pipeline[1][1](original_img))
         logging.info(f"Saved debug view to {debug_path}")
-        
         return None
 
     def find_icon_by_image(self, template_path, threshold=0.8):
-        """
-        Locates the icon using template matching.
-        """
+        """Locates the icon using template matching."""
         if not os.path.exists(template_path):
-            logging.warning(f"Template file not found: {template_path}")
             return None
-            
-        logging.info(f"Attempting to find icon via Template Matching using {template_path}...")
+        logging.info(f"Template matching: {template_path}")
         img_rgb = self.capture_screen()
         img_gray = cv2.cvtColor(img_rgb, cv2.COLOR_BGR2GRAY)
         template = cv2.imread(template_path, 0)
         w, h = template.shape[::-1]
-
         res = cv2.matchTemplate(img_gray, template, cv2.TM_CCOEFF_NORMED)
         min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
-
         if max_val >= threshold:
             center_x = max_loc[0] + w // 2
             center_y = max_loc[1] + h // 2
-            logging.info(f"Found template match with confidence {max_val:.2f} at ({center_x}, {center_y})")
+            # Apply same DPI scaling if needed (usually template match is 1:1 with screen, but coordinates need scaling)
+            try:
+               import pyautogui
+               log_w, log_h = pyautogui.size()
+               scale_x = img_rgb.shape[1] / log_w
+               scale_y = img_rgb.shape[0] / log_h
+               center_x = int(center_x / scale_x)
+               center_y = int(center_y / scale_y)
+            except:
+               pass
             return (center_x, center_y)
-        
-        logging.warning(f"Template not found. Max confidence: {max_val:.2f}")
         return None
 
     def ground_icon(self, label="Notepad", template_path=None):
-        """
-        Wrapper to try multiple strategies.
-        """
-        # Strategy 1: OCR (Dynamic)
         coords = self.find_icon_by_text(label)
-        if coords:
-            return coords
-            
-        # Strategy 2: Template (Visual Fallback)
-        if template_path:
-            coords = self.find_icon_by_image(template_path)
-            if coords:
-                return coords
-                
+        if coords: return coords
+        if template_path: return self.find_icon_by_image(template_path)
         return None

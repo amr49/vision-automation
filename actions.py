@@ -1,10 +1,9 @@
 from botcity.core import DesktopBot
 import time
 import logging
-import os
-from grounding import GroundingEngine
-
 import subprocess
+from grounding import GroundingEngine
+import pyperclip
 
 class NotepadBot(DesktopBot):
     def __init__(self):
@@ -19,7 +18,7 @@ class NotepadBot(DesktopBot):
         
         # Minimize all windows to see desktop
         subprocess.run(["powershell", "-command", "(New-Object -ComObject Shell.Application).MinimizeAll()"], shell=True)
-        time.sleep(1.0) # Wait for animation
+        time.sleep(1.0) 
         
         # Grounding
         coords = self.grounding.ground_icon(label=app_name, template_path=template_path)
@@ -29,22 +28,23 @@ class NotepadBot(DesktopBot):
             return False
             
         x, y = coords
+        logging.info(f"Found icon at Logical Coordinates: ({x}, {y})")
         
-        # Use pynput for direct input to bypass BotCity's element state checks
+        # Use pynput for direct input to bypass BotCity state checks
         from pynput.mouse import Button, Controller
         mouse = Controller()
         
-        # Move and Click explicitly at coordinates
+        # Move explicitly
         self.mouse_move(x, y)
         time.sleep(0.5)
         
-        # Direct left click (Select)
+        # --- LAUNCH STRATEGY (GOLDEN VERIFIED) ---
+        # 1. Single Click to Select
         mouse.press(Button.left)
         mouse.release(Button.left)
-        
         time.sleep(0.5)
         
-        # Launch using ENTER key only (Prevents double opening)
+        # 2. Enter Key to Launch (Reliable, no double-click ghosts)
         from pynput.keyboard import Key, Controller as KeyboardController
         keyboard = KeyboardController()
         keyboard.press(Key.enter)
@@ -59,64 +59,50 @@ class NotepadBot(DesktopBot):
             return False
 
     def wait_for_window(self, title_re, timeout=10000):
-        """
-        Waits for the Notepad process to be active.
-        """
         start = time.time()
         while (time.time() - start) * 1000 < timeout:
-            # Check if notepad process exists via PowerShell
-            # We filter by MainWindowTitle to ensure it's actually open
             cmd = "Get-Process | Where-Object {$_.MainWindowTitle -match 'Notepad'} | Select-Object -ExpandProperty Id"
             result = subprocess.run(["powershell", "-command", cmd], capture_output=True, text=True, shell=True)
-            
             if result.stdout.strip():
-                time.sleep(0.5) # Give it a moment to render
+                time.sleep(0.5)
                 return True
-            
             time.sleep(1.0)
-            
         return False
 
     def write_post(self, title, body):
         """
         Types the content into Notepad.
         """
-        # Ensure window is focused and ready
+        # Ensure window is focused
         time.sleep(1.0)
         
         content = f"Title: {title}\n\n{body}"
-        # Use pyperclip to manually set clipboard first to ensure "vsv" doesn't happen
-        # BotCity's paste method sometimes relies on internal buffers.
-        import pyperclip
-        pyperclip.copy(content)
-        time.sleep(0.5) # Wait for clipboard to take
         
-        self.control_v() # Explicit Paste shortcut
+        # Use Clipboard Paste (Fast + Safe)
+        pyperclip.copy(content)
+        time.sleep(0.5) # Wait for clipboard
+        self.control_v()
         time.sleep(1.0)
 
     def save_file(self, full_path):
         """
         Saves the file to the specific path.
         """
-        self.control_s() # Ctrl+S
+        self.control_s() 
         time.sleep(1.0)
         
-        # Wait for Save As dialog?
-        # We assume it pops up.
+        # Set clipboard path first
+        pyperclip.copy(full_path)
+        time.sleep(0.5)
+        self.control_v()
         
-        # Type full path
-        self.paste(full_path)
         time.sleep(0.5)
         self.enter()
         
-        # Handle "Confirm Save As" if it exists (overwrite)
-        # Maybe wait a sec and see if a popup for "Do you want to replace it?" appears.
+        # Wait for overwrite popup just in case (blind enter)
         time.sleep(1.0)
-        # Primitive "Yes" handling: If we are still in dialog? Hard to know without finding "Yes" button image.
-        # We will assume unique filenames (post_id) avoid this usually.
-        # If we need to overwrite, usually pressing 'y' works in some dialogs or Alt+Y.
+        self.enter() 
         
-        # Wait for save to finish
         time.sleep(1.0)
 
     def close_app(self):
