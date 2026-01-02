@@ -13,6 +13,8 @@ env/
 
 # Artifacts
 *.png
+!resources/*.png
+!screenshots/*.png
 *.log
 grounding_failed.png
 debug_ocr_view.png
