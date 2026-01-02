@@ -42,7 +42,7 @@ Unlike standard coordinate-based automation, this solution features a **Computer
 2.  **Run the automation:**
 
     ```powershell
-    python main.py
+    uv run main.py
     ```
 
 ## How It Works
